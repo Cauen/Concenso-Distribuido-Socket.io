@@ -139,6 +139,7 @@ function MYPROCESS(minhaPorta, paraConectarVetor, processoComErro) {
       // MATRIZ COMPLETA
       log("MATRIZ COMPLETA!");
       log(ids);
+      let ERRORCOUNTER = 0;
       for (let i = 1; i <= ids.length; i++) {
         let hashTable = {};
         for (let j = 1; j <= ids.length; j++) {
@@ -149,10 +150,11 @@ function MYPROCESS(minhaPorta, paraConectarVetor, processoComErro) {
         log(hashTable);
         let recebidos = Object.values(hashTable);
         let processoOK = Math.max(recebidos) >= Math.floor(ids.length) / 2 + 1;
-        log("PROCESSO OK");
+        log("PROCESSO OK???");
         log(processoOK);
 
         if (!processoOK) {
+          ERRORCOUNTER += 1;
           log("PROCESSO " + i + " com erro!");
           if (this.consClienteServidor[i])
             this.consClienteServidor[i].disconnect();
@@ -160,6 +162,10 @@ function MYPROCESS(minhaPorta, paraConectarVetor, processoComErro) {
             this.listaSocketsConetadosAMim[i].disconnect();
         }
       }
+      if (ERRORCOUNTER <= (ids.length-1)/3 )
+        log("PROCESSO PODE CONTINUAR");
+      else
+        log("PROCESSO NÃO PODE CONTINUAR, ERROS DEMAIS");
       log("PROCESSOS AINDA CONECTADOS");
       Object.entries(this.consClienteServidor).forEach(connection => {
         log(connection[0] + " está conectado? " + connection[1].connected);
