@@ -2,145 +2,87 @@ var app = require("http").createServer();
 var io = require("socket.io")(app);
 var ioc = require("socket.io-client");
 var readline = require("readline");
+const { tempoParaExpulsar } = require("./configs");
 
-function MYPROCESS(
-  minhaPorta,
-  paraConectar1,
-  paraConectar2,
-  paraConectar3,
-  processoComErro
-) {
+function MYPROCESS(minhaPorta, paraConectarVetor, processoComErro) {
   this.basePorta = 3000;
   this.minhaPorta = minhaPorta;
   this.idProcesso = minhaPorta - this.basePorta;
-  this.paraConectar1 = paraConectar1;
-  this.paraConectar2 = paraConectar2;
-  this.paraConectar3 = paraConectar3;
   this.processoComErro = processoComErro;
   this.listaSocketsConetadosAMim = {};
-  this.listaConectadosIdProcesso = {};
-  this.counter = 0;
   this.vetorDeDados = {};
   this.matrizDeDados = {};
+  this.timeOut;
 
-  this.conexaoClienteProcesso1 = ioc.connect(
-    "http://localhost:" + this.paraConectar1,
-    {
+  // Gerando conexões de cliente -> servidores a conectar
+  this.consClienteServidor = {};
+  paraConectarVetor.forEach(port => {
+    const idProcesso = port - this.basePorta;
+    let conexaoCliente = ioc.connect("http://localhost:" + port, {
       query: { idProcesso: this.idProcesso }
-    }
-  );
-  this.conexaoClienteProcesso2 = ioc.connect(
-    "http://localhost:" + this.paraConectar2,
-    {
-      query: { idProcesso: this.idProcesso }
-    }
-  );
-  this.conexaoClienteProcesso3 = ioc.connect(
-    "http://localhost:" + this.paraConectar3,
-    {
-      query: { idProcesso: this.idProcesso }
-    }
-  );
+    });
+    this.consClienteServidor[idProcesso] = conexaoCliente;
+    conexaoCliente.on("msg", msg => {
+      log("BATATA DOCE");
+    });
+    conexaoCliente.on("msg", data => {
+      console.log(
+        "Svr " + this.idProcesso + " recebe " + data + " de " + idProcesso
+      );
+      this.preencherVetorDeDados(idProcesso, data);
+    });
 
-  this.arrayConnections = {};
-  this.arrayConnections[this.paraConectar1 - this.basePorta] = this.conexaoClienteProcesso1;
-  this.arrayConnections[this.paraConectar2 - this.basePorta] = this.conexaoClienteProcesso2;
-  this.arrayConnections[this.paraConectar3 - this.basePorta] = this.conexaoClienteProcesso3;
+    conexaoCliente.on("vetor", data => {
+      console.log(
+        "Svr " + this.idProcesso + " rec vet" + data + " de " + idProcesso
+      );
+      this.preencherMatriz(idProcesso, data);
+    });
+  });
 
-  MYPROCESS.prototype.inicializar = () => {
+  MYPROCESS.prototype.abrirServidor = () => {
+    this.timeOut = setTimeout(() => {
+      paraConectarVetor.forEach(port => {
+        const thisProcID = port - this.basePorta;
+        if (!this.vetorDeDados[thisProcID]) {
+          console.log(
+            "NÃO RECEBEU NENHUMA MENSAGEM DO PROCESSO " +
+              thisProcID +
+              " no últimos " +
+              tempoParaExpulsar / 1000 +
+              "segundos"
+          );
+          if (this.listaSocketsConetadosAMim[thisProcID]) {
+            log('Desconectando processo ' + thisProcID);
+            this.listaSocketsConetadosAMim[thisProcID].disconnect();
+            this.consClienteServidor[thisProcID].disconnect();
+          } else {
+            log("Processo " + thisProcID + " não está sequer conectado");
+          }
+        }
+      });
+      
+      this.testarVetor();
+    }, tempoParaExpulsar);
+
     io.listen(this.minhaPorta);
     io.use((socket, next) => {
       let idProcesso = socket.handshake.query.idProcesso;
       socket.idProcesso = idProcesso;
       next();
     });
-    // RECEBENDO MENSAGENS NO PROCESSO 2
+    // Conexão sendo recebidas pelo servidor
     io.on("connection", socket => {
-      this.counter += 1;
-      this.listaSocketsConetadosAMim[socket.id] = socket;
-      this.listaConectadosIdProcesso[socket.idProcesso] = socket.idProcesso;
-
-      socket.on("mensagem", data => {
-        console.log(
-          "Processo " +
-            this.idProcesso +
-            "(ESTE) recebendo de " +
-            data.idProcesso +
-            " a mensagem " +
-            data.mensagem
-        );
-
-        if (typeof data.mensagem !== "object")
-          // recebendo dado
-          this.preencherVetorDeDados(data.idProcesso, data.mensagem);
-        // Recebendo array completo
-        else this.preencherMatriz(data.idProcesso, data.mensagem);
-      });
+      const myProcID = this.idProcesso;
+      const procID = socket.idProcesso;
+      this.listaSocketsConetadosAMim[procID] = socket;
+      log("Svr " + myProcID + " recebendo conexão de CLIENTE " + procID);
 
       socket.on("disconnect", () => {
-        console.log("DESCONECTANDO DE " + socket.idProcesso + " EXPULSO");
-        this.counter -= 1;
-        delete this.listaSocketsConetadosAMim[socket.id];
-        delete this.listaConectadosIdProcesso[socket.idProcesso];
+        log("Svr " + myProcID + " perdeu conexão de CLIENTE " + procID);
+        delete this.listaSocketsConetadosAMim[procID];
       });
     });
-
-    this.conexaoClienteProcesso1.on("connect", () => {
-      console.log(
-        "PROCESSO " +
-          this.idProcesso +
-          " CONECTADO AO PROCESSO " +
-          (this.paraConectar1 - this.basePorta) +
-          "!"
-      );
-    });
-
-    this.conexaoClienteProcesso2.on("connect", () => {
-      console.log(
-        "PROCESSO " +
-          this.idProcesso +
-          " CONECTADO AO PROCESSO " +
-          (this.paraConectar2 - this.basePorta) +
-          "!"
-      );
-    });
-
-    this.conexaoClienteProcesso3.on("connect", () => {
-      console.log(
-        "PROCESSO " +
-          this.idProcesso +
-          " CONECTADO AO PROCESSO " +
-          (this.paraConectar3 - this.basePorta) +
-          "!"
-      );
-    });
-  };
-
-  const enviarMensagemProcesso1 = mensagem => {
-    if (this.conexaoClienteProcesso1)
-      this.conexaoClienteProcesso1.emit("mensagem", {
-        mensagem: mensagem,
-        idProcesso: this.idProcesso
-      });
-    else console.log("PROCESSO 1 NÃO CONECTADO");
-  };
-
-  const enviarMensagemProcesso2 = mensagem => {
-    if (this.conexaoClienteProcesso2)
-      this.conexaoClienteProcesso2.emit("mensagem", {
-        mensagem: mensagem,
-        idProcesso: this.idProcesso
-      });
-    else console.log("PROCESSO 2 NÃO CONECTADO");
-  };
-
-  const enviarMensagemProcesso3 = mensagem => {
-    if (this.conexaoClienteProcesso3)
-      this.conexaoClienteProcesso3.emit("mensagem", {
-        mensagem: mensagem,
-        idProcesso: this.idProcesso
-      });
-    else console.log("PROCESSO 3 NÃO CONECTADO");
   };
 
   async function perguntarAoProcesso(query) {
@@ -158,76 +100,113 @@ function MYPROCESS(
   }
 
   this.preencherVetorDeDados = (pos, valor) => {
+    console.log("PREENCHENDO VETOR");
     this.vetorDeDados[pos] = valor;
 
+    this.testarVetor();
+  };
+
+  this.testarVetor = () => {
     const ids = [
-      ...Object.keys(this.listaConectadosIdProcesso),
+      ...Object.keys(this.listaSocketsConetadosAMim),
       this.idProcesso
     ];
-    console.log("ids");
-    console.log(ids);
-    console.log("ARRAY ATUAL = ", this.vetorDeDados);
+    log("ids");
+    log(ids);
+    log("VETOR ATUAL");
+    log(this.vetorDeDados);
     let fim = true;
     ids.forEach(id => (this.vetorDeDados[id] ? "" : (fim = false)));
     if (fim) {
-      console.log("ARRAY COMPLETA");
-      this.enviarParaOResto(this.vetorDeDados);
-      this.matrizDeDados[this.idProcesso] = this.vetorDeDados;
+      log("VETOR COMPLETA");
+      this.emitParaClientes("vetor", this.vetorDeDados);
+      this.preencherMatriz(this.idProcesso,this.vetorDeDados);
     }
-  };
+  }
 
   this.preencherMatriz = (pos, vetor) => {
     this.matrizDeDados[pos] = vetor;
-    console.log("this.matrizDeDados");
-    console.log(this.matrizDeDados);
+    log("this.matrizDeDados");
+    log(this.matrizDeDados);
 
     const ids = [
-      ...Object.keys(this.listaConectadosIdProcesso),
+      ...Object.keys(this.listaSocketsConetadosAMim),
       this.idProcesso
     ];
     let fim = true;
     ids.forEach(id => (this.matrizDeDados[id] ? "" : (fim = false)));
     if (fim) {
       // MATRIZ COMPLETA
-      console.log("MATRIZ COMPLETA!");
-      console.log(ids);
+      log("MATRIZ COMPLETA!");
+      log(ids);
       for (let i = 1; i <= ids.length; i++) {
         let hashTable = {};
         for (let j = 1; j <= ids.length; j++) {
-          console.log("I", i, "J", j);
+          log("I", i, "J", j);
           let value = this.matrizDeDados[j][i];
           hashTable[value] ? (hashTable[value] += 1) : (hashTable[value] = 1);
         }
-        console.log(hashTable);
+        log(hashTable);
         let recebidos = Object.values(hashTable);
-        let processoOK = Math.max(recebidos) >= Math.floor(ids.length)/2+1;
-        console.log('PROCESSO OK');
-        console.log(processoOK);
+        let processoOK = Math.max(recebidos) >= Math.floor(ids.length) / 2 + 1;
+        log("PROCESSO OK");
+        log(processoOK);
 
         if (!processoOK) {
-          console.log("PROCESSO " + i + " com erro!");
-          if (this.arrayConnections[i])
-          this.arrayConnections[i].disconnect();
+          log("PROCESSO " + i + " com erro!");
+          if (this.consClienteServidor[i])
+            this.consClienteServidor[i].disconnect();
+          if (this.listaSocketsConetadosAMim[i])
+            this.listaSocketsConetadosAMim[i].disconnect();
         }
       }
-      console.log('PROCESSOS AINDA CONECTADOS');
-      Object.entries(this.arrayConnections).forEach(connection => {
-        console.log(connection[0] + " está conectado? " + connection[1].connected);
-      })
+      log("PROCESSOS AINDA CONECTADOS");
+      Object.entries(this.consClienteServidor).forEach(connection => {
+        log(connection[0] + " está conectado? " + connection[1].connected);
+      });
+      this.limparDados();
+    } else {
+      log("MATRIZ NÃO COMPLETA");
+      log(this.matrizDeDados);
     }
   };
 
-  this.enviarParaOResto = mensagem => {
+  this.emitParaClientes = (endpoint, mensagem) => {
+    const vetorClientes = Object.values(this.listaSocketsConetadosAMim);
+    vetorClientes.forEach(thisSocket => {
+      log(
+        "Enviando mensagem pro cliente " +
+          thisSocket.idProcesso +
+          ": " +
+          mensagem
+      );
+      thisSocket.emit(endpoint, mensagem);
+    });
+  };
+
+  this.limparDados = () => {
+    this.vetorDeDados = {};
+    this.matrizDeDados = {};
+    clearInterval(this.timeOut);
+  };
+
+  this.enviarDigitadoPeloProcesso = mensagem => {
     // SE FOR OBJETO, É ENVIO DE VETOR, SE NÃO, É ENVIO DE MENSAGEM
-    if (typeof mensagem !== "object" && this.processoComErro) {
+    const PROCESSOCOMERRO = mensagem[0] === '-';
+    if (PROCESSOCOMERRO) {
       // ENVINADO MENSAGEM COM ERRO
-      enviarMensagemProcesso1(mensagem + "Q");
-      enviarMensagemProcesso2(mensagem + "W");
-      enviarMensagemProcesso3(mensagem + "E");
+      Object.values(this.listaSocketsConetadosAMim).forEach(thisSocket => {
+        let mensagemProblematica = mensagem + Math.random();
+        log(
+          "Enviando mensagem pro cliente " +
+            thisSocket.idProcesso +
+            ": " +
+            mensagemProblematica
+        );
+        thisSocket.emit("msg", mensagemProblematica);
+      });
     } else {
-      enviarMensagemProcesso1(mensagem);
-      enviarMensagemProcesso2(mensagem);
-      enviarMensagemProcesso3(mensagem);
+      this.emitParaClientes("msg", mensagem);
     }
   };
 
@@ -235,9 +214,11 @@ function MYPROCESS(
     while (true) {
       const ans = await perguntarAoProcesso("O que você mandará?? ");
       this.preencherVetorDeDados(this.idProcesso, ans);
-      this.enviarParaOResto(ans);
+      this.enviarDigitadoPeloProcesso(ans);
     }
   };
 }
+
+let log = console.log;
 
 module.exports.MYPROCESS = MYPROCESS;
