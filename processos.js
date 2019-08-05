@@ -42,6 +42,11 @@ function MYPROCESS(
     }
   );
 
+  this.arrayConnections = {};
+  this.arrayConnections[this.paraConectar1 - this.basePorta] = this.conexaoClienteProcesso1;
+  this.arrayConnections[this.paraConectar2 - this.basePorta] = this.conexaoClienteProcesso2;
+  this.arrayConnections[this.paraConectar3 - this.basePorta] = this.conexaoClienteProcesso3;
+
   MYPROCESS.prototype.inicializar = () => {
     io.listen(this.minhaPorta);
     io.use((socket, next) => {
@@ -59,7 +64,7 @@ function MYPROCESS(
         console.log(
           "Processo " +
             this.idProcesso +
-            " recebendo de " +
+            "(ESTE) recebendo de " +
             data.idProcesso +
             " a mensagem " +
             data.mensagem
@@ -73,7 +78,7 @@ function MYPROCESS(
       });
 
       socket.on("disconnect", () => {
-        console.log("DESCONECTANDO ");
+        console.log("DESCONECTANDO DE " + socket.idProcesso + " EXPULSO");
         this.counter -= 1;
         delete this.listaSocketsConetadosAMim[socket.id];
         delete this.listaConectadosIdProcesso[socket.idProcesso];
@@ -184,7 +189,7 @@ function MYPROCESS(
     ids.forEach(id => (this.matrizDeDados[id] ? "" : (fim = false)));
     if (fim) {
       // MATRIZ COMPLETA
-      console.log("MATRIZ COMPLETA");
+      console.log("MATRIZ COMPLETA!");
       console.log(ids);
       for (let i = 1; i <= ids.length; i++) {
         let hashTable = {};
@@ -194,7 +199,21 @@ function MYPROCESS(
           hashTable[value] ? (hashTable[value] += 1) : (hashTable[value] = 1);
         }
         console.log(hashTable);
+        let recebidos = Object.values(hashTable);
+        let processoOK = Math.max(recebidos) >= Math.floor(ids.length)/2+1;
+        console.log('PROCESSO OK');
+        console.log(processoOK);
+
+        if (!processoOK) {
+          console.log("PROCESSO " + i + " com erro!");
+          if (this.arrayConnections[i])
+          this.arrayConnections[i].disconnect();
+        }
       }
+      console.log('PROCESSOS AINDA CONECTADOS');
+      Object.entries(this.arrayConnections).forEach(connection => {
+        console.log(connection[0] + " está conectado? " + connection[1].connected);
+      })
     }
   };
 
