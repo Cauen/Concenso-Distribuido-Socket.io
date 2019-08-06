@@ -1,9 +1,9 @@
 const { MYPROCESS } = require('./processos');
-const { portas, enderecos } = require("./configs");
-const minhaPorta = portas[3];
-const minhaEndereco = enderecos[3];
-const restoPortas = portas.filter(porta => porta !== minhaPorta);
+const { acessos } = require("./configs");
+const meuAcesso = acessos[3];
+const minhaPorta = meuAcesso.port;
+const restoAcessos = acessos.filter(acesso => acesso !== meuAcesso);
 
-const processo = new MYPROCESS(minhaEndereco, minhaPorta, restoPortas);
+const processo = new MYPROCESS(minhaPorta, restoAcessos);
 processo.abrirServidor();
 processo.iniciarPerguntas();

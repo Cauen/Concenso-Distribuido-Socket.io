@@ -4,7 +4,7 @@ var ioc = require("socket.io-client");
 var readline = require("readline");
 const { tempoParaExpulsar } = require("./configs");
 
-function MYPROCESS(endereco, minhaPorta, paraConectarVetor) {
+function MYPROCESS(minhaPorta, paraConectarVetor) {
   this.basePorta = 3000;
   this.minhaPorta = minhaPorta;
   this.idProcesso = minhaPorta - this.basePorta;
@@ -16,9 +16,9 @@ function MYPROCESS(endereco, minhaPorta, paraConectarVetor) {
 
   // Gerando conexões de cliente -> servidores a conectar
   this.consClienteServidor = {};
-  paraConectarVetor.forEach(port => {
-    const idProcesso = port - this.basePorta;
-    let conexaoCliente = ioc.connect("http://" + endereco + ":" + port, {
+  paraConectarVetor.forEach(conexao => {
+    const idProcesso = conexao.port - this.basePorta;
+    let conexaoCliente = ioc.connect("http://" + conexao.ip + ":" + conexao.port, {
       query: { idProcesso: this.idProcesso }
     });
     this.consClienteServidor[idProcesso] = conexaoCliente;
@@ -42,8 +42,8 @@ function MYPROCESS(endereco, minhaPorta, paraConectarVetor) {
 
   MYPROCESS.prototype.abrirServidor = () => {
     this.timeOut = setTimeout(() => {
-      paraConectarVetor.forEach(port => {
-        const thisProcID = port - this.basePorta;
+      paraConectarVetor.forEach(conexao => {
+        const thisProcID = conexao.port - this.basePorta;
         if (!this.vetorDeDados[thisProcID]) {
           console.log(
             "NÃO RECEBEU NENHUMA MENSAGEM DO PROCESSO " +
