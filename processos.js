@@ -4,21 +4,21 @@ var ioc = require("socket.io-client");
 var readline = require("readline");
 const { tempoParaExpulsar } = require("./configs");
 
-function MYPROCESS(minhaPorta, paraConectarVetor, processoComErro) {
+function MYPROCESS(endereco, minhaPorta, paraConectarVetor) {
   this.basePorta = 3000;
   this.minhaPorta = minhaPorta;
   this.idProcesso = minhaPorta - this.basePorta;
-  this.processoComErro = processoComErro;
   this.listaSocketsConetadosAMim = {};
   this.vetorDeDados = {};
   this.matrizDeDados = {};
+  this.processoComErro = false;
   this.timeOut;
 
   // Gerando conexões de cliente -> servidores a conectar
   this.consClienteServidor = {};
   paraConectarVetor.forEach(port => {
     const idProcesso = port - this.basePorta;
-    let conexaoCliente = ioc.connect("http://localhost:" + port, {
+    let conexaoCliente = ioc.connect("http://" + endereco + ":" + port, {
       query: { idProcesso: this.idProcesso }
     });
     this.consClienteServidor[idProcesso] = conexaoCliente;
@@ -53,7 +53,7 @@ function MYPROCESS(minhaPorta, paraConectarVetor, processoComErro) {
               "segundos"
           );
           if (this.listaSocketsConetadosAMim[thisProcID]) {
-            log('Desconectando processo ' + thisProcID);
+            log("Desconectando processo " + thisProcID);
             this.listaSocketsConetadosAMim[thisProcID].disconnect();
             this.consClienteServidor[thisProcID].disconnect();
           } else {
@@ -61,7 +61,7 @@ function MYPROCESS(minhaPorta, paraConectarVetor, processoComErro) {
           }
         }
       });
-      
+
       this.testarVetor();
     }, tempoParaExpulsar);
 
@@ -106,6 +106,13 @@ function MYPROCESS(minhaPorta, paraConectarVetor, processoComErro) {
     this.testarVetor();
   };
 
+  this.errorObjeto = function(spy) {
+    Object.keys(spy).forEach(function(key) {
+      spy[key] = "err" + Math.random();
+    });
+    return spy;
+  };
+
   this.testarVetor = () => {
     const ids = [
       ...Object.keys(this.listaSocketsConetadosAMim),
@@ -119,10 +126,12 @@ function MYPROCESS(minhaPorta, paraConectarVetor, processoComErro) {
     ids.forEach(id => (this.vetorDeDados[id] ? "" : (fim = false)));
     if (fim) {
       log("VETOR COMPLETA");
-      this.emitParaClientes("vetor", this.vetorDeDados);
-      this.preencherMatriz(this.idProcesso,this.vetorDeDados);
+      if (!this.processoComErro)
+        this.emitParaClientes("vetor", this.vetorDeDados);
+      else this.emitParaClientes("vetor", this.errorObjeto(this.vetorDeDados));
+      this.preencherMatriz(this.idProcesso, this.vetorDeDados);
     }
-  }
+  };
 
   this.preencherMatriz = (pos, vetor) => {
     this.matrizDeDados[pos] = vetor;
@@ -149,7 +158,8 @@ function MYPROCESS(minhaPorta, paraConectarVetor, processoComErro) {
         }
         log(hashTable);
         let recebidos = Object.values(hashTable);
-        let processoOK = Math.max(recebidos) >= Math.floor(ids.length) / 2 + 1;
+        let processoOK = Math.max(...recebidos) >= Math.floor(ids.length) / 2 + 1;
+        log('MAX RECEBIDOS ' + Math.max(recebidos) + " >= " + Math.floor(ids.length));
         log("PROCESSO OK???");
         log(processoOK);
 
@@ -162,10 +172,8 @@ function MYPROCESS(minhaPorta, paraConectarVetor, processoComErro) {
             this.listaSocketsConetadosAMim[i].disconnect();
         }
       }
-      if (ERRORCOUNTER <= (ids.length-1)/3 )
-        log("PROCESSO PODE CONTINUAR");
-      else
-        log("PROCESSO NÃO PODE CONTINUAR, ERROS DEMAIS");
+      if (ERRORCOUNTER <= (ids.length - 1) / 3) log("PROCESSO PODE CONTINUAR");
+      else log("PROCESSO NÃO PODE CONTINUAR, ERROS DEMAIS");
       log("PROCESSOS AINDA CONECTADOS");
       Object.entries(this.consClienteServidor).forEach(connection => {
         log(connection[0] + " está conectado? " + connection[1].connected);
@@ -198,8 +206,8 @@ function MYPROCESS(minhaPorta, paraConectarVetor, processoComErro) {
 
   this.enviarDigitadoPeloProcesso = mensagem => {
     // SE FOR OBJETO, É ENVIO DE VETOR, SE NÃO, É ENVIO DE MENSAGEM
-    const PROCESSOCOMERRO = mensagem[0] === '-';
-    if (PROCESSOCOMERRO) {
+    this.processoComErro = mensagem[0] === "-";
+    if (this.processoComErro) {
       // ENVINADO MENSAGEM COM ERRO
       Object.values(this.listaSocketsConetadosAMim).forEach(thisSocket => {
         let mensagemProblematica = mensagem + Math.random();

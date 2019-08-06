@@ -4,4 +4,10 @@ module.exports.portas = [
   3003,
   3004
 ];
-module.exports.tempoParaExpulsar = 10000;
+module.exports.enderecos = [
+  '127.0.0.1',
+  '127.0.0.1',
+  '127.0.0.1',
+  '127.0.0.1'
+];
+module.exports.tempoParaExpulsar = 1000000;
